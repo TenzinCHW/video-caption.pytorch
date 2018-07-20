@@ -19,6 +19,10 @@ def parse_opt():
         type=str,
         default='data/caption.json',
         help='path to the processed video caption json')
+    parser.add_argument(
+        '--index_clip_mapping',
+        default='data/MPII_index2clipname.json',
+        help='path to mapping of index to clip name json')
 
     parser.add_argument(
         '--feats_dir',

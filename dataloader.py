@@ -36,6 +36,7 @@ class VideoDataset(Dataset):
         self.feats_dir = opt["feats_dir"]
         self.c3d_feats_dir = opt['c3d_feats_dir']
         self.with_c3d = opt['with_c3d']
+        self.index_map = opt['index_clip_mapping']
         print('load feats from %s' % (self.feats_dir))
         # load in the sequence data
         self.max_len = opt["max_len"]
@@ -49,7 +50,7 @@ class VideoDataset(Dataset):
             ix += len(self.splits['train'])
         elif self.mode == 'test':
             ix = ix + len(self.splits['train']) + len(self.splits['val'])
-        
+ 
         fc_feat = []
         for dir in self.feats_dir:
             fc_feat.append(np.load(os.path.join(dir, 'video%i.npy' % (ix))))
