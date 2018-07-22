@@ -4,10 +4,67 @@ import random
 import os
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 
-class VideoDataset(Dataset):
+class MovieLoader():
+    def __init__(self, opt, mode, shuffle=True):
+        self.mode = mode  # to load train/val/test data
+        self.shuffle = shuffle
+
+         # load the json file which contains information about the dataset
+        self.captions = json.load(open(opt['caption_json']))
+        info = json.load(open(opt['info_json']))
+        self.splits = info['movies']
+        self.ix_to_word = info['ix_to_word']
+        self.word_to_ix = info['word_to_ix']
+        print('vocab size is ', len(self.ix_to_word))
+        self.splits = info['movies']
+        print('number of train movies: ', len(self.splits['train']))
+        print('number of val movies: ', len(self.splits['val']))
+        print('number of test movies: ', len(self.splits['test']))
+
+        self.feats_dir = opt['feats_dir']
+        self.c3d_feats_dir = opt['c3d_feats_dir']
+        self.with_c3d = opt['with_c3d']
+        self.index_map = json.load(open(opt['index_clip_mapping']))
+        print('load feats from %s' % (self.feats_dir))
+        # load in the sequence data
+        self.max_len = opt['max_len']
+        print('max sequence length in data is', self.max_len)
+        self.batch_size = opt['batch_size']
+
+        self.opt_ref = {'caption' : self.captions,
+                        'ix_to_word' : self.ix_to_word,
+                        'word_to_ix' : self.word_to_ix,
+                        'feats_dir' : self.feats_dir,
+                        'index_map' : self.index_map,
+                        'max_len' : self.max_len,
+                        'c3d_feats_dir' : self.c3d_feats_dir,
+                        'with_c3d' : self.with_c3d}
+
+        # Control split of data to load
+        movie_ids = [self.splits[self.mode][ix]
+                     for ix in range(len(self))]
+        movie_sets = [VideoDataset(self.opt_ref, movie_id)
+                      for movie_id in movie_ids]
+        self.loaders = [DataLoader(movie_set, batch_size=self.batch_size,
+                             shuffle=False)
+                             for movie_set in movie_sets]
+
+    def __iter__(self):
+        self.n = 0
+        if self.shuffle:
+            random.shuffle(self.loaders)
+        return self
+
+    def __next__(self):
+        if self.n < len(self):
+            next_item = self.loaders[self.n]
+            self.n += 1
+            return next_item
+        else:
+            raise StopIteration
 
     def get_vocab_size(self):
         return len(self.get_vocab())
@@ -15,53 +72,45 @@ class VideoDataset(Dataset):
     def get_vocab(self):
         return self.ix_to_word
 
+    def __len__(self):
+        return len(self.splits[self.mode])
+
+
+class VideoDataset(Dataset):
+
     def get_seq_length(self):
         return self.seq_length
 
-    def __init__(self, opt, mode):
+    def __init__(self, opt, movie_id):
         super(VideoDataset, self).__init__()
-        self.mode = mode  # to load train/val/test data
-
-        # load the json file which contains information about the dataset
-        self.captions = json.load(open(opt["caption_json"]))
-        info = json.load(open(opt["info_json"]))
-        self.ix_to_word = info['ix_to_word']
-        self.word_to_ix = info['word_to_ix']
-        print('vocab size is ', len(self.ix_to_word))
-        self.splits = info['videos']
-        print('number of train videos: ', len(self.splits['train']))
-        print('number of val videos: ', len(self.splits['val']))
-        print('number of test videos: ', len(self.splits['test']))
-
-        self.feats_dir = opt["feats_dir"]
+        self.movie_id = movie_id
+        self.feats_dir =  opt['feats_dir']
+        self.captions = opt['caption']
+        self.ix_to_word = opt['ix_to_word']
+        self.word_to_ix = opt['word_to_ix']
+        self.index_map = opt['index_map']
+        self.max_len = opt['max_len']
         self.c3d_feats_dir = opt['c3d_feats_dir']
         self.with_c3d = opt['with_c3d']
-        self.index_map = opt['index_clip_mapping']
-        print('load feats from %s' % (self.feats_dir))
-        # load in the sequence data
-        self.max_len = opt["max_len"]
-        print('max sequence length in data is', self.max_len)
+
 
     def __getitem__(self, ix):
         """This function returns a tuple that is further passed to collate_fn
         """
-        # which part of data to load
-        if self.mode == 'val':
-            ix += len(self.splits['train'])
-        elif self.mode == 'test':
-            ix = ix + len(self.splits['train']) + len(self.splits['val'])
- 
+        global_clip_id = str(self.index_map['movies'][self.movie_id][ix])
+        clip_name = self.index_map['clips'][global_clip_id]
+        npy_name = '{}.npy'.format(clip_name)
         fc_feat = []
         for dir in self.feats_dir:
-            fc_feat.append(np.load(os.path.join(dir, 'video%i.npy' % (ix))))
+            fc_feat.append(np.load(os.path.join(dir, npy_name)))
         fc_feat = np.concatenate(fc_feat, axis=1)
         if self.with_c3d == 1:
-            c3d_feat = np.load(os.path.join(self.c3d_feats_dir, 'video%i.npy'%(ix)))
+            c3d_feat = np.load(os.path.join(self.c3d_feats_dir, npy_name))
             c3d_feat = np.mean(c3d_feat, axis=0, keepdims=True)
             fc_feat = np.concatenate((fc_feat, np.tile(c3d_feat, (fc_feat.shape[0], 1))), axis=1)
         label = np.zeros(self.max_len)
         mask = np.zeros(self.max_len)
-        captions = self.captions['video%i'%(ix)]['final_captions']
+        captions = self.captions[global_clip_id]['final_captions']
         gts = np.zeros((len(captions), self.max_len))
         for i, cap in enumerate(captions):
             if len(cap) > self.max_len:
@@ -85,4 +134,5 @@ class VideoDataset(Dataset):
         return data
 
     def __len__(self):
-        return len(self.splits[self.mode])
+        return len(self.index_map['movies'][self.movie_id])
+

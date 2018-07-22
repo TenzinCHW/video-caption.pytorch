@@ -58,10 +58,7 @@ def main(params):
     out = {}
     out['ix_to_word'] = itow
     out['word_to_ix'] = wtoi
-    out['videos'] = {'train': [], 'val': [], 'test': []}
-    videos = json.load(open(params['input_json'], 'r'))['videos']
-    for i in videos:
-        out['videos'][i['split']].append(int(i['id']))
+    out['movies'] = json.load(open(params['input_json'], 'r'))['movies']
     json.dump(out, open(params['info_json'], 'w'))
     json.dump(video_caption, open(params['caption_json'], 'w'))
 

@@ -8,14 +8,14 @@ import opts
 import torch
 import torch.optim as optim
 from torch.nn.utils import clip_grad_value_
-from dataloader import VideoDataset
+from dataloader import MovieLoader
 from misc.rewards import get_self_critical_reward, init_cider_scorer
 from models import DecoderRNN, EncoderRNN, S2VTAttModel, S2VTModel
 from torch import nn
 from torch.utils.data import DataLoader
 
 
-def train(loader, model, crit, optimizer, lr_scheduler, opt, rl_crit=None):
+def train(movie_loader, model, crit, optimizer, lr_scheduler, opt, rl_crit=None):
     model.train()
     #model = nn.DataParallel(model)
     for epoch in range(opt["epochs"]):
@@ -29,38 +29,39 @@ def train(loader, model, crit, optimizer, lr_scheduler, opt, rl_crit=None):
         else:
             sc_flag = False
 
-        for data in loader:
-            torch.cuda.synchronize()
-            fc_feats = data['fc_feats'].cuda()
-            labels = data['labels'].cuda()
-            masks = data['masks'].cuda()
+        for loader in movie_loader:
+            for data in loader:
+                torch.cuda.synchronize()
+                fc_feats = data['fc_feats'].cuda()
+                labels = data['labels'].cuda()
+                masks = data['masks'].cuda()
 
-            optimizer.zero_grad()
-            if not sc_flag:
-                seq_probs, _ = model(fc_feats, labels, 'train')
-                loss = crit(seq_probs, labels[:, 1:], masks[:, 1:])
-            else:
-                seq_probs, seq_preds = model(
-                    fc_feats, mode='inference', opt=opt)
-                reward = get_self_critical_reward(model, fc_feats, data,
-                                                  seq_preds)
-                print(reward.shape)
-                loss = rl_crit(seq_probs, seq_preds,
-                               torch.from_numpy(reward).float().cuda())
+                optimizer.zero_grad()
+                if not sc_flag:
+                    seq_probs, _ = model(fc_feats, labels, 'train')
+                    loss = crit(seq_probs, labels[:, 1:], masks[:, 1:])
+                else:
+                    seq_probs, seq_preds = model(
+                        fc_feats, mode='inference', opt=opt)
+                    reward = get_self_critical_reward(model, fc_feats, data,
+                                                      seq_preds)
+                    print(reward.shape)
+                    loss = rl_crit(seq_probs, seq_preds,
+                                   torch.from_numpy(reward).float().cuda())
 
-            loss.backward()
-            clip_grad_value_(model.parameters(), opt['grad_clip'])
-            optimizer.step()
-            train_loss = loss.item()
-            torch.cuda.synchronize()
-            iteration += 1
+                loss.backward()
+                clip_grad_value_(model.parameters(), opt['grad_clip'])
+                optimizer.step()
+                train_loss = loss.item()
+                torch.cuda.synchronize()
+                iteration += 1
 
-            if not sc_flag:
-                print("iter %d (epoch %d), train_loss = %.6f" %
-                      (iteration, epoch, train_loss))
-            else:
-                print("iter %d (epoch %d), avg_reward = %.6f" %
-                      (iteration, epoch, np.mean(reward[:, 0])))
+                if not sc_flag:
+                    print("iter %d (epoch %d), train_loss = %.6f" %
+                          (iteration, epoch, train_loss))
+                else:
+                    print("iter %d (epoch %d), avg_reward = %.6f" %
+                          (iteration, epoch, np.mean(reward[:, 0])))
 
         if epoch % opt["save_checkpoint_every"] == 0:
             model_path = os.path.join(opt["checkpoint_path"],
@@ -74,9 +75,9 @@ def train(loader, model, crit, optimizer, lr_scheduler, opt, rl_crit=None):
 
 
 def main(opt):
-    dataset = VideoDataset(opt, 'train')
-    dataloader = DataLoader(dataset, batch_size=opt["batch_size"], shuffle=True)
-    opt["vocab_size"] = dataset.get_vocab_size()
+    movie_loader = MovieLoader(opt, 'train')
+    #dataloader = DataLoader(dataset, batch_size=1, shuffle=True) # batch_size 1 movie at a time
+    opt["vocab_size"] = movie_loader.get_vocab_size()
     if opt["model"] == 'S2VTModel':
         model = S2VTModel(
             opt["vocab_size"],
@@ -117,7 +118,7 @@ def main(opt):
         step_size=opt["learning_rate_decay_every"],
         gamma=opt["learning_rate_decay_rate"])
 
-    train(dataloader, model, crit, optimizer, exp_lr_scheduler, opt, rl_crit)
+    train(movie_loader, model, crit, optimizer, exp_lr_scheduler, opt, rl_crit)
 
 
 if __name__ == '__main__':

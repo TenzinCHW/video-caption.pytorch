@@ -28,7 +28,7 @@ def parse_opt():
         '--feats_dir',
         nargs='*',
         type=str,
-        default=['data/feats/resnet152/'],
+        default=['data/feats/audio/'],
         help='path to the directory containing the preprocessed fc feats')
 
     parser.add_argument('--c3d_feats_dir', type=str, default='data/c3d_feats')
