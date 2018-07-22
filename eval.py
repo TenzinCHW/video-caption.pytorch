@@ -28,30 +28,31 @@ def convert_data_to_coco_scorer_format(data_frame):
 
 def test(model, crit, dataset, vocab, opt):
     model.eval()
-    loader = DataLoader(dataset, batch_size=opt["batch_size"], shuffle=True)
+    movie_loader = dataset
     scorer = COCOScorer()
     gt_dataframe = json_normalize(
         json.load(open(opt["input_json"]))['sentences'])
     gts = convert_data_to_coco_scorer_format(gt_dataframe)
     results = []
     samples = {}
-    for data in loader:
-        # forward the model to get loss
-        fc_feats = data['fc_feats'].cuda()
-        labels = data['labels'].cuda()
-        masks = data['masks'].cuda()
-        video_ids = data['video_ids']
-      
-        # forward the model to also get generated samples for each image
-        with torch.no_grad():
-            seq_probs, seq_preds = model(
-                fc_feats, mode='inference', opt=opt)
+    for loader in movie_loader:
+        for data in loader:
+            # forward the model to get loss
+            fc_feats = data['fc_feats'].cuda()
+            labels = data['labels'].cuda()
+            masks = data['masks'].cuda()
+            video_ids = data['video_ids']
+          
+            # forward the model to also get generated samples for each image
+            with torch.no_grad():
+                seq_probs, seq_preds = model(
+                    fc_feats, mode='inference', opt=opt)
 
-        sents = utils.decode_sequence(vocab, seq_preds)
+            sents = utils.decode_sequence(vocab, seq_preds)
 
-        for k, sent in enumerate(sents):
-            video_id = video_ids[k]
-            samples[video_id] = [{'image_id': video_id, 'caption': sent}]
+            for k, sent in enumerate(sents):
+                video_id = video_ids[k]
+                samples[video_id] = [{'image_id': video_id, 'caption': sent}]
 
     with suppress_stdout_stderr():
         valid_score = scorer.score(gts, samples, samples.keys())
@@ -70,7 +71,7 @@ def test(model, crit, dataset, vocab, opt):
 
 
 def main(opt):
-    dataset = VideoDataset(opt, "test")
+    dataset = MovieLoader(opt, "test")
     opt["vocab_size"] = dataset.get_vocab_size()
     opt["seq_length"] = dataset.max_len
     if opt["model"] == 'S2VTModel':
