@@ -141,9 +141,12 @@ class VideoDataset(Dataset):
 #        fc_feat = np.hstack(fc_feat)
 #        fc_feat = np.expand_dims(fc_feat, 0)
 
-        for dir in self.feats_dir:
-            fc_feat.append(np.load(os.path.join(dir, npy_name)))
-        fc_feat = np.concatenate(fc_feat, axis=1)
+        fc_feat = np.concatenate([np.load(os.path.join(d, npy_name))
+                                  for d in self.feats_dir], axis=1)
+
+#        for dir in self.feats_dir:
+#            fc_feat.append(np.load(os.path.join(dir, npy_name)))
+#        fc_feat = np.concatenate(fc_feat, axis=1)
 
         if self.with_c3d == 1:
             c3d_feat = np.load(os.path.join(self.c3d_feats_dir, npy_name))
@@ -173,6 +176,21 @@ class VideoDataset(Dataset):
         data['gts'] = torch.from_numpy(gts).long()
         data['video_ids'] = global_clip_id
         return data
+
+
+    def global_clip_id(self, ix):
+        return str(self.index_map['movies'][self.movie_id][ix])
+
+
+    def npy_name(self, global_clip_id):
+        clip_name = self.index_map['clips'][global_clip_id]
+        npy_name = '{}.npy'.format(clip_name)
+
+
+    def fc_feats(self, npy_name):
+        return np.concatenate([np.load(os.path.join(d, npy_name))
+                               for d in self.feats_dir], axis=1)
+
 
     def __len__(self):
         return len(self.index_map['movies'][self.movie_id]) - self.batch_size
