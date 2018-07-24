@@ -101,61 +101,38 @@ class VideoDataset(Dataset):
 
 
     def __getitem__(self, ix):
-        data = {'fc_feats' : [],
-                'labels' : [],
-                'masks' : [],
-                'gts' : [],
-                'video_ids' : []}
-
-        for i in range(ix, ix + self.batch_size):
-            data = self.collect(data, self.sample_single(i))
-
-        data = self.cat(data)
-        return data
-
-
-    def collect(self, data, single):
-        for k in data.keys():
-            data[k].append(single[k])
-        return data
-
-
-    def cat(self, data):
-        for k, v in data.items():
-            if type(v[0]) is torch.Tensor:
-                data[k] = torch.cat(v)
-        return data
-
-
-    def sample_single(self, ix):
-#    def __getitem__(self, ix):
         """This function returns a tuple that is further passed to collate_fn
         """
-        global_clip_id = self.global_clip_id(ix)
-        npy_name = self.npy_name(global_clip_id)
+        global_clip_ids = [self.global_clip_id(i) for i in range(ix, ix+self.batch_size)]
+        npy_names = [self.npy_name(global_clip_id) for global_clip_id in global_clip_ids]
+        fc_feats = [self.fc_feats(npy_name) for npy_name in npy_names]
 
+#        if self.with_c3d == 1:
+#            c3d_feat = np.load(os.path.join(self.c3d_feats_dir, npy_name))
+#            c3d_feat = np.mean(c3d_feat, axis=0, keepdims=True)
+#            fc_feat = np.concatenate((fc_feat, np.tile(c3d_feat, (fc_feat.shape[0], 1))), axis=1)
 
-        fc_feat = self.fc_feats(npy_name)
-
-        if self.with_c3d == 1:
-            c3d_feat = np.load(os.path.join(self.c3d_feats_dir, npy_name))
-            c3d_feat = np.mean(c3d_feat, axis=0, keepdims=True)
-            fc_feat = np.concatenate((fc_feat, np.tile(c3d_feat, (fc_feat.shape[0], 1))), axis=1)
-        captions = self.captions[global_clip_id]['final_captions']
-        gts = self.gts(global_clip_id, captions)
+        captions = [self.captions[global_clip_id]['final_captions'] for global_clip_id in global_clip_ids]
+        gts = [self.gts(global_clip_ids[i], caps) for i, caps in enumerate(captions)]
 
         # random select a caption for this video
-        label = gts[self.cap_ix(captions)]
-        non_zero = (label == 0).nonzero()
-        mask = np.zeros(self.max_len)
-        mask[:int(non_zero[0][0]) + 1] = 1
+        labels = [gts[self.cap_ix(caps)] for caps in captions]
+        non_zeros = [(label == 0).nonzero() for label in labels]
+        masks = [np.zeros(self.max_len) for nz in non_zeros]
+        for nz, mask in zip(non_zeros, masks):
+            mask[:int(nz[0][0]) + 1] = 1
+
+        fc_feats = np.concatenate(fc_feats)
+        labels = np.squeeze(np.concatenate(labels, axis=1))
+        masks = np.concatenate(masks)
+        gts = np.concatenate(gts)
 
         data = {}
-        data['fc_feats'] = torch.from_numpy(fc_feat).type(torch.FloatTensor)
-        data['labels'] = torch.from_numpy(label).type(torch.LongTensor)
-        data['masks'] = torch.from_numpy(mask).type(torch.FloatTensor)
+        data['fc_feats'] = torch.from_numpy(fc_feats).type(torch.FloatTensor)
+        data['labels'] = torch.from_numpy(labels).type(torch.LongTensor)
+        data['masks'] = torch.from_numpy(masks).type(torch.FloatTensor)
         data['gts'] = torch.from_numpy(gts).long()
-        data['video_ids'] = global_clip_id
+        data['video_ids'] = global_clip_ids
         return data
 
 
@@ -189,7 +166,7 @@ class VideoDataset(Dataset):
         return gts
 
 
-    def cap_id(self, captions):
+    def cap_ix(self, captions):
         #return random.randint(0, len(captions) - 1)
         return 0 # MPII dataset only has 1 sentence per clip
 
