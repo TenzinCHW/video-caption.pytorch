@@ -131,9 +131,8 @@ class VideoDataset(Dataset):
 #    def __getitem__(self, ix):
         """This function returns a tuple that is further passed to collate_fn
         """
-        global_clip_id = str(self.index_map['movies'][self.movie_id][ix])
-        clip_name = self.index_map['clips'][global_clip_id]
-        npy_name = '{}.npy'.format(clip_name)
+        global_clip_id = self.global_clip_id(ix)
+        npy_name = self.npy_name(global_clip_id)
         fc_feat = []
 
 #        for dir in self.feats_dir:
@@ -141,19 +140,12 @@ class VideoDataset(Dataset):
 #        fc_feat = np.hstack(fc_feat)
 #        fc_feat = np.expand_dims(fc_feat, 0)
 
-        fc_feat = np.concatenate([np.load(os.path.join(d, npy_name))
-                                  for d in self.feats_dir], axis=1)
-
-#        for dir in self.feats_dir:
-#            fc_feat.append(np.load(os.path.join(dir, npy_name)))
-#        fc_feat = np.concatenate(fc_feat, axis=1)
+        fc_feat = self.fc_feats(npy_name)
 
         if self.with_c3d == 1:
             c3d_feat = np.load(os.path.join(self.c3d_feats_dir, npy_name))
             c3d_feat = np.mean(c3d_feat, axis=0, keepdims=True)
             fc_feat = np.concatenate((fc_feat, np.tile(c3d_feat, (fc_feat.shape[0], 1))), axis=1)
-        label = np.zeros(self.max_len)
-        mask = np.zeros(self.max_len)
         captions = self.captions[global_clip_id]['final_captions']
         gts = np.zeros((len(captions), self.max_len))
         for i, cap in enumerate(captions):
@@ -167,6 +159,7 @@ class VideoDataset(Dataset):
         cap_ix = random.randint(0, len(captions) - 1)
         label = gts[cap_ix]
         non_zero = (label == 0).nonzero()
+        mask = np.zeros(self.max_len)
         mask[:int(non_zero[0][0]) + 1] = 1
 
         data = {}
@@ -184,7 +177,7 @@ class VideoDataset(Dataset):
 
     def npy_name(self, global_clip_id):
         clip_name = self.index_map['clips'][global_clip_id]
-        npy_name = '{}.npy'.format(clip_name)
+        return '{}.npy'.format(clip_name)
 
 
     def fc_feats(self, npy_name):
