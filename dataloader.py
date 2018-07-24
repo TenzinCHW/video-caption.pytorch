@@ -133,12 +133,7 @@ class VideoDataset(Dataset):
         """
         global_clip_id = self.global_clip_id(ix)
         npy_name = self.npy_name(global_clip_id)
-        fc_feat = []
 
-#        for dir in self.feats_dir:
-#            fc_feat.append(np.load(os.path.join(dir, npy_name)).flatten())
-#        fc_feat = np.hstack(fc_feat)
-#        fc_feat = np.expand_dims(fc_feat, 0)
 
         fc_feat = self.fc_feats(npy_name)
 
@@ -147,17 +142,10 @@ class VideoDataset(Dataset):
             c3d_feat = np.mean(c3d_feat, axis=0, keepdims=True)
             fc_feat = np.concatenate((fc_feat, np.tile(c3d_feat, (fc_feat.shape[0], 1))), axis=1)
         captions = self.captions[global_clip_id]['final_captions']
-        gts = np.zeros((len(captions), self.max_len))
-        for i, cap in enumerate(captions):
-            if len(cap) > self.max_len:
-                cap = cap[:self.max_len]
-                cap[-1] = '<eos>'
-            for j, w in enumerate(cap):
-                gts[i, j] = self.word_to_ix[w]
+        gts = self.gts(global_clip_id, captions)
 
         # random select a caption for this video
-        cap_ix = random.randint(0, len(captions) - 1)
-        label = gts[cap_ix]
+        label = gts[self.cap_ix(captions)]
         non_zero = (label == 0).nonzero()
         mask = np.zeros(self.max_len)
         mask[:int(non_zero[0][0]) + 1] = 1
@@ -181,8 +169,29 @@ class VideoDataset(Dataset):
 
 
     def fc_feats(self, npy_name):
+#        fc_feat = []
+#        for dir in self.feats_dir:
+#            fc_feat.append(np.load(os.path.join(dir, npy_name)).flatten())
+#        fc_feat = np.hstack(fc_feat)
+#        fc_feat = np.expand_dims(fc_feat, 0)
         return np.concatenate([np.load(os.path.join(d, npy_name))
                                for d in self.feats_dir], axis=1)
+
+
+    def gts(self, global_clip_id, captions):
+        gts = np.zeros((len(captions), self.max_len))
+        for i, cap in enumerate(captions):
+            if len(cap) > self.max_len:
+                cap = cap[:self.max_len]
+                cap[-1] = '<eos>'
+            for j, w in enumerate(cap):
+                gts[i, j] = self.word_to_ix[w]
+        return gts
+
+
+    def cap_id(self, captions):
+        #return random.randint(0, len(captions) - 1)
+        return 0 # MPII dataset only has 1 sentence per clip
 
 
     def __len__(self):
