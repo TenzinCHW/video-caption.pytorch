@@ -6,7 +6,7 @@ from torch import nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from models import EncoderRNN, DecoderRNN, S2VTAttModel, S2VTModel
-from dataloader import VideoDataset
+from dataloader import MovieLoader
 import misc.utils as utils
 from misc.cocoeval import suppress_stdout_stderr, COCOScorer
 
@@ -42,7 +42,7 @@ def test(model, crit, dataset, vocab, opt):
             labels = data['labels'].cuda()
             masks = data['masks'].cuda()
             video_ids = data['video_ids']
-          
+ 
             # forward the model to also get generated samples for each image
             with torch.no_grad():
                 seq_probs, seq_preds = model(
@@ -51,11 +51,11 @@ def test(model, crit, dataset, vocab, opt):
             sents = utils.decode_sequence(vocab, seq_preds)
 
             for k, sent in enumerate(sents):
-                video_id = video_ids[k]
+                video_id = int(video_ids[k])
                 samples[video_id] = [{'image_id': video_id, 'caption': sent}]
 
-    with suppress_stdout_stderr():
-        valid_score = scorer.score(gts, samples, samples.keys())
+#    with suppress_stdout_stderr():
+    valid_score = scorer.score(gts, samples, samples.keys())
     results.append(valid_score)
     print(valid_score)
 
@@ -121,3 +121,4 @@ if __name__ == '__main__':
         opt[k] = v
     os.environ['CUDA_VISIBLE_DEVICES'] = opt["gpu"]
     main(opt)
+

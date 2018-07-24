@@ -40,28 +40,30 @@ def extract_feats(params, model, load_image_fn):
     if not os.path.isdir(dir_fc):
         os.mkdir(dir_fc)
     print("save video feats to %s" % (dir_fc))
-    video_list = glob.glob(os.path.join(params['video_path'], '*.mp4'))
+    video_list = glob.glob(os.path.join(params['video_path'], '*.avi'))
     for video in tqdm(video_list):
-        video_id = video.split("/")[-1].split(".")[0]
+        video_id = video.split("/")[-1]
+        video_id = '.'.join(video_id.split(".")[:-1])
         dst = params['model'] + '_' + video_id
-        extract_frames(video, dst)
+        if not os.path.isfile(os.path.join(dir_fc, video_id + '.npy')):
+            extract_frames(video, dst)
 
-        image_list = sorted(glob.glob(os.path.join(dst, '*.jpg')))
-        samples = np.round(np.linspace(
-            0, len(image_list) - 1, params['n_frame_steps']))
-        image_list = [image_list[int(sample)] for sample in samples]
-        images = torch.zeros((len(image_list), C, H, W))
-        for iImg in range(len(image_list)):
-            img = load_image_fn(image_list[iImg])
-            images[iImg] = img
-        with torch.no_grad():
-            fc_feats = model(images.cuda()).squeeze()
-        img_feats = fc_feats.cpu().numpy()
-        # Save the inception features
-        outfile = os.path.join(dir_fc, video_id + '.npy')
-        np.save(outfile, img_feats)
-        # cleanup
-        shutil.rmtree(dst)
+            image_list = sorted(glob.glob(os.path.join(dst, '*.jpg')))
+            samples = np.round(np.linspace(
+                0, len(image_list) - 1, params['n_frame_steps']))
+            image_list = [image_list[int(sample)] for sample in samples]
+            images = torch.zeros((len(image_list), C, H, W))
+            for iImg in range(len(image_list)):
+                img = load_image_fn(image_list[iImg])
+                images[iImg] = img
+            with torch.no_grad():
+                fc_feats = model(images.cuda()).squeeze()
+            img_feats = fc_feats.cpu().numpy()
+            # Save the inception features
+            outfile = os.path.join(dir_fc, video_id + '.npy')
+            np.save(outfile, img_feats)
+            # cleanup
+            shutil.rmtree(dst)
 
 
 if __name__ == '__main__':
@@ -77,7 +79,7 @@ if __name__ == '__main__':
                         default='data/train-video', help='path to video dataset')
     parser.add_argument("--model", dest="model", type=str, default='resnet152',
                         help='the CNN model you want to use to extract_feats')
-    
+ 
     args = parser.parse_args()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     params = vars(args)

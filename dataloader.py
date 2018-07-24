@@ -49,7 +49,7 @@ class MovieLoader():
         movie_sets = [VideoDataset(self.opt_ref, movie_id)
                       for movie_id in movie_ids]
         self.loaders = [DataLoader(movie_set, batch_size=self.batch_size,
-                             shuffle=False)
+                             shuffle=True)
                              for movie_set in movie_sets]
 
     def __iter__(self):
@@ -130,7 +130,7 @@ class VideoDataset(Dataset):
         data['labels'] = torch.from_numpy(label).type(torch.LongTensor)
         data['masks'] = torch.from_numpy(mask).type(torch.FloatTensor)
         data['gts'] = torch.from_numpy(gts).long()
-        data['video_ids'] = 'video%i'%(ix)
+        data['video_ids'] = global_clip_id
         return data
 
     def __len__(self):
