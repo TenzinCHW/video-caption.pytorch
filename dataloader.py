@@ -41,16 +41,21 @@ class MovieLoader():
                         'index_map' : self.index_map,
                         'max_len' : self.max_len,
                         'c3d_feats_dir' : self.c3d_feats_dir,
-                        'with_c3d' : self.with_c3d}
+                        'with_c3d' : self.with_c3d,
+                        'batch_size' : self.batch_size}
 
         # Control split of data to load
         movie_ids = [self.splits[self.mode][ix]
                      for ix in range(len(self))]
         movie_sets = [VideoDataset(self.opt_ref, movie_id)
                       for movie_id in movie_ids]
-        self.loaders = [DataLoader(movie_set, batch_size=self.batch_size,
+        self.loaders = [DataLoader(movie_set, batch_size=1,
                              shuffle=True)
                              for movie_set in movie_sets]
+
+#        self.loaders = [DataLoader(movie_set, batch_size=self.batch_size,
+#                             shuffle=False)
+#                             for movie_set in movie_sets]
 
     def __iter__(self):
         self.n = 0
@@ -92,18 +97,54 @@ class VideoDataset(Dataset):
         self.max_len = opt['max_len']
         self.c3d_feats_dir = opt['c3d_feats_dir']
         self.with_c3d = opt['with_c3d']
+        self.batch_size = opt['batch_size']
 
 
     def __getitem__(self, ix):
+        data = {'fc_feats' : [],
+                'labels' : [],
+                'masks' : [],
+                'gts' : [],
+                'video_ids' : []}
+
+        for i in range(ix, ix + self.batch_size):
+            data = self.collect(data, self.sample_single(i))
+
+        data = self.cat(data)
+        return data
+
+
+    def collect(self, data, single):
+        for k in data.keys():
+            data[k].append(single[k])
+        return data
+
+
+    def cat(self, data):
+        for k, v in data.items():
+            if type(v[0]) is torch.Tensor:
+                data[k] = torch.cat(v)
+        return data
+
+
+    def sample_single(self, ix):
+#    def __getitem__(self, ix):
         """This function returns a tuple that is further passed to collate_fn
         """
         global_clip_id = str(self.index_map['movies'][self.movie_id][ix])
         clip_name = self.index_map['clips'][global_clip_id]
         npy_name = '{}.npy'.format(clip_name)
         fc_feat = []
+
+#        for dir in self.feats_dir:
+#            fc_feat.append(np.load(os.path.join(dir, npy_name)).flatten())
+#        fc_feat = np.hstack(fc_feat)
+#        fc_feat = np.expand_dims(fc_feat, 0)
+
         for dir in self.feats_dir:
             fc_feat.append(np.load(os.path.join(dir, npy_name)))
         fc_feat = np.concatenate(fc_feat, axis=1)
+
         if self.with_c3d == 1:
             c3d_feat = np.load(os.path.join(self.c3d_feats_dir, npy_name))
             c3d_feat = np.mean(c3d_feat, axis=0, keepdims=True)
@@ -134,5 +175,6 @@ class VideoDataset(Dataset):
         return data
 
     def __len__(self):
-        return len(self.index_map['movies'][self.movie_id])
+        return len(self.index_map['movies'][self.movie_id]) - self.batch_size
+#        return len(self.index_map['movies'][self.movie_id])
 
