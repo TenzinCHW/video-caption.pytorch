@@ -52,10 +52,11 @@ def test(model, crit, dataset, vocab, opt):
 
             for k, sent in enumerate(sents):
                 video_id = int(video_ids[k])
-                samples[video_id] = [{'image_id': video_id, 'caption': sent}]
+                gt = gts[video_id][0]['caption']
+                samples[video_id] = [{'image_id': video_id, 'caption': sent, 'gt': gt}]
 
-#    with suppress_stdout_stderr():
-    valid_score = scorer.score(gts, samples, samples.keys())
+    with suppress_stdout_stderr():
+        valid_score = scorer.score(gts, samples, samples.keys())
     results.append(valid_score)
     print(valid_score)
 
