@@ -93,7 +93,7 @@ class DecoderRNN(nn.Module):
             targets_emb = self.embedding(targets)
             for i in range(self.max_length - 1):
                 current_words = targets_emb[:, i, :]
-                context = self.attention(decoder_hidden.squeeze(0), encoder_outputs)
+                context = self.attention(decoder_hidden, encoder_outputs)
                 decoder_input = torch.cat([current_words, context], dim=1)
                 decoder_input = self.input_dropout(decoder_input).unsqueeze(1)
                 decoder_output, decoder_hidden = self.rnn(

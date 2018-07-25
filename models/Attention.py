@@ -29,7 +29,9 @@ class Attention(nn.Module):
             Variable -- context vector of size batch_size x dim
         """
         batch_size, seq_len, _ = encoder_outputs.size()
-        hidden_state = hidden_state.unsqueeze(1).repeat(1, seq_len, 1)
+        if isinstance(hidden_state, tuple):
+            hidden_state, _ = hidden_state
+        hidden_state = hidden_state.squeeze(0).unsqueeze(1).repeat(1, seq_len, 1)
         inputs = torch.cat((encoder_outputs, hidden_state),
                            2).view(-1, self.dim * 2)
         o = self.linear2(F.tanh(self.linear1(inputs)))
