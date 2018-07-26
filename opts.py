@@ -7,7 +7,7 @@ def parse_opt():
     parser.add_argument(
         '--input_json',
         type=str,
-        default='data/videodatainfo_2017.json',
+        default='data/MPII_sentences.json',
         help='path to the json file containing video info')
     parser.add_argument(
         '--info_json',
@@ -44,7 +44,7 @@ def parse_opt():
 
     # Model settings
     parser.add_argument(
-        "--model", type=str, default='S2VTModel', help="with model to use")
+        "--model", type=str, default='S2VTAttModel', help="with model to use")
 
     parser.add_argument(
         "--max_len",
@@ -70,7 +70,7 @@ def parse_opt():
         default=0.2,
         help='strength of dropout in the Language Model RNN')
     parser.add_argument(
-        '--rnn_type', type=str, default='gru', help='lstm or gru')
+        '--rnn_type', type=str, default='lstm', help='lstm or gru')
     parser.add_argument(
         '--rnn_dropout_p',
         type=float,
@@ -92,9 +92,9 @@ def parse_opt():
     # Optimization: General
 
     parser.add_argument(
-        '--epochs', type=int, default=6001, help='number of epochs')
+        '--epochs', type=int, default=100, help='number of epochs')
     parser.add_argument(
-        '--batch_size', type=int, default=128, help='minibatch size')
+        '--batch_size', type=int, default=100, help='minibatch size')
     parser.add_argument(
         '--grad_clip',
         type=float,
@@ -136,7 +136,7 @@ def parse_opt():
     parser.add_argument(
         '--save_checkpoint_every',
         type=int,
-        default=50,
+        default=1,
         help='how often to save a model checkpoint (in epoch)?')
     parser.add_argument(
         '--checkpoint_path',
