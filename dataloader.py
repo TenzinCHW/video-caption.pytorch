@@ -128,8 +128,6 @@ class VideoDataset(Dataset):
 
 
     def sample_single(self, ix):
-
-
 #    def __getitem__(self, ix):
         """This function returns a tuple that is further passed to collate_fn
         """
@@ -167,13 +165,20 @@ class VideoDataset(Dataset):
 
 
     def fc_feats(self, npy_name):
-#        fc_feat = []
-#        for dir in self.feats_dir:
+        fc_feat = []
+        for dir in self.feats_dir:
+            feat = np.load(os.path.join(dir, npy_name))
+            if len(feat) == 1:
+                feat = np.repeat(feat, 40, axis=0)
+            fc_feat.append(feat)
 #            fc_feat.append(np.load(os.path.join(dir, npy_name)).flatten())
+        fc_feat = np.concatenate(fc_feat, axis=1)
+        return fc_feat
 #        fc_feat = np.hstack(fc_feat)
-#        fc_feat = np.expand_dims(fc_feat, 0)
-        return np.concatenate([np.load(os.path.join(d, npy_name))
-                               for d in self.feats_dir], axis=1)
+#        return np.expand_dims(fc_feat, 0)
+
+#        return np.concatenate([np.load(os.path.join(d, npy_name))
+#                               for d in self.feats_dir], axis=1)
 
 
     def gts(self, global_clip_id, captions):
@@ -193,7 +198,5 @@ class VideoDataset(Dataset):
 
 
     def __len__(self):
-        return 50
-#        return len(self.index_map['movies'][self.movie_id]) - self.batch_size
-#        return len(self.index_map['movies'][self.movie_id])
+        return len(self.index_map['movies'][self.movie_id]) - self.batch_size
 
