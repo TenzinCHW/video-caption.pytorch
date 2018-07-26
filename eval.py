@@ -41,6 +41,7 @@ def test(model, crit, dataset, vocab, opt):
             fc_feats = data['fc_feats'].cuda()
             labels = data['labels'].cuda()
             masks = data['masks'].cuda()
+            #video_ids = [v_id[0] for v_id in data['video_ids']]
             video_ids = data['video_ids']
  
             # forward the model to also get generated samples for each image
@@ -55,8 +56,8 @@ def test(model, crit, dataset, vocab, opt):
                 gt = gts[video_id][0]['caption']
                 samples[video_id] = [{'image_id': video_id, 'caption': sent, 'gt': gt}]
 
-    with suppress_stdout_stderr():
-        valid_score = scorer.score(gts, samples, samples.keys())
+#    with suppress_stdout_stderr():
+    valid_score = scorer.score(gts, samples, samples.keys())
     results.append(valid_score)
     print(valid_score)
 

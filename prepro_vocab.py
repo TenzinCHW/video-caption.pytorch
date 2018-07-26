@@ -58,7 +58,7 @@ def main(params):
     out = {}
     out['ix_to_word'] = itow
     out['word_to_ix'] = wtoi
-    out['movies'] = json.load(open(params['input_json'], 'r'))['movies']
+    out['videos'] = json.load(open(params['input_json'], 'r'))['videos']
     json.dump(out, open(params['info_json'], 'w'))
     json.dump(video_caption, open(params['caption_json'], 'w'))
 

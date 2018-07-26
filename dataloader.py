@@ -9,29 +9,6 @@ from torch.utils.data import Dataset, DataLoader
 
 class MovieLoader():
     def __init__(self, opt, mode, shuffle=True):
-        self.mode = mode  # to load train/val/test data
-        self.shuffle = shuffle
-
-         # load the json file which contains information about the dataset
-        self.captions = json.load(open(opt['caption_json']))
-        info = json.load(open(opt['info_json']))
-        self.splits = info['movies']
-        self.ix_to_word = info['ix_to_word']
-        self.word_to_ix = info['word_to_ix']
-        print('vocab size is ', len(self.ix_to_word))
-        self.splits = info['movies']
-        print('number of train movies: ', len(self.splits['train']))
-        print('number of val movies: ', len(self.splits['val']))
-        print('number of test movies: ', len(self.splits['test']))
-
-        self.feats_dir = opt['feats_dir']
-        self.c3d_feats_dir = opt['c3d_feats_dir']
-        self.with_c3d = opt['with_c3d']
-        self.index_map = json.load(open(opt['index_clip_mapping']))
-        print('load feats from %s' % (self.feats_dir))
-        # load in the sequence data
-        self.max_len = opt['max_len']
-        print('max sequence length in data is', self.max_len)
         self.batch_size = opt['batch_size']
 
         self.opt_ref = {'caption' : self.captions,
@@ -71,11 +48,6 @@ class MovieLoader():
         else:
             raise StopIteration
 
-    def get_vocab_size(self):
-        return len(self.get_vocab())
-
-    def get_vocab(self):
-        return self.ix_to_word
 
     def __len__(self):
         return len(self.splits[self.mode])
@@ -83,52 +55,69 @@ class MovieLoader():
 
 class VideoDataset(Dataset):
 
+    def get_vocab_size(self):
+        return len(self.get_vocab())
+
+    def get_vocab(self):
+        return self.ix_to_word
+
     def get_seq_length(self):
         return self.seq_length
 
-    def __init__(self, opt, movie_id):
+    def __init__(self, opt, mode):
         super(VideoDataset, self).__init__()
-        self.movie_id = movie_id
-        self.feats_dir =  opt['feats_dir']
-        self.captions = opt['caption']
-        self.ix_to_word = opt['ix_to_word']
-        self.word_to_ix = opt['word_to_ix']
-        self.index_map = opt['index_map']
-        self.max_len = opt['max_len']
+        self.mode = mode  # to load train/val/test data
+
+         # load the json file which contains information about the dataset
+        self.captions = json.load(open(opt['caption_json']))
+        info = json.load(open(opt['info_json']))
+        self.splits = info['videos']
+        self.ix_to_word = info['ix_to_word']
+        self.word_to_ix = info['word_to_ix']
+        print('vocab size is ', len(self.ix_to_word))
+        print('number of train videos: ', len(self.splits['train']))
+        print('number of val videos: ', len(self.splits['val']))
+        print('number of test videos: ', len(self.splits['test']))
+
+        self.feats_dir = opt['feats_dir']
         self.c3d_feats_dir = opt['c3d_feats_dir']
         self.with_c3d = opt['with_c3d']
-        self.batch_size = opt['batch_size']
+        self.index_map = json.load(open(opt['index_clip_mapping']))
+        print('load feats from %s' % (self.feats_dir))
+        # load in the sequence data
+        self.max_len = opt['max_len']
+        print('max sequence length in data is', self.max_len)
 
 
-    def __getitem__(self, ix):
-        data = {'fc_feats' : [],
-                'labels' : [],
-                'masks' : [],
-                'gts' : [],
-                'video_ids' : []}
-
-        for i in range(ix, ix + self.batch_size):
-            data = self.collect(data, self.sample_single(i))
-
-        data = self.cat(data)
-        return data
-
-
-    def collect(self, data, single):
-        for k in data.keys():
-            data[k].append(single[k])
-        return data
-
-
-    def cat(self, data):
-        for k, v in data.items():
-            if type(v[0]) is torch.Tensor:
-                data[k] = torch.cat(v)
-        return data
-
-
-    def sample_single(self, ix):
 #    def __getitem__(self, ix):
+#        data = {'fc_feats' : [],
+#                'labels' : [],
+#                'masks' : [],
+#                'gts' : [],
+#                'video_ids' : []}
+#
+#        for i in range(ix, ix + self.batch_size):
+#            data = self.collect(data, self.sample_single(i))
+#
+#        data = self.cat(data)
+#        return data
+#
+#
+#    def collect(self, data, single):
+#        for k in data.keys():
+#            data[k].append(single[k])
+#        return data
+#
+#
+#    def cat(self, data):
+#        for k, v in data.items():
+#            if type(v[0]) is torch.Tensor:
+#                data[k] = torch.cat(v)
+#        return data
+
+
+#    def sample_single(self, ix):
+    def __getitem__(self, ix):
         """This function returns a tuple that is further passed to collate_fn
         """
 #        if self.with_c3d == 1:
@@ -156,7 +145,8 @@ class VideoDataset(Dataset):
 
 
     def global_clip_id(self, ix):
-        return str(self.index_map['movies'][self.movie_id][ix])
+        return str(self.splits[self.mode][ix])
+#        return str(self.index_map['movies'][self.movie_id][ix])
 
 
     def npy_name(self, global_clip_id):
@@ -198,5 +188,6 @@ class VideoDataset(Dataset):
 
 
     def __len__(self):
-        return len(self.index_map['movies'][self.movie_id]) - self.batch_size
+        return len(self.splits[self.mode])
+#        return len(self.index_map['movies'][self.movie_id])
 
