@@ -110,7 +110,7 @@ class DecoderRNN(nn.Module):
 
             for t in range(self.max_length - 1):
                 context = self.attention(
-                    decoder_hidden.squeeze(0), encoder_outputs)
+                    decoder_hidden, encoder_outputs)
 
                 if t == 0:  # input <bos>
                     it = torch.LongTensor([self.sos_id] * batch_size).cuda()

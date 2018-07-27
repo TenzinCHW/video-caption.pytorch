@@ -1,5 +1,6 @@
 import json
 import os
+from tqdm import tqdm
 
 import numpy as np
 
@@ -18,64 +19,72 @@ from torch.utils.data import DataLoader
 def train(loader, model, crit, optimizer, lr_scheduler, opt, rl_crit=None):
     model.train()
     #model = nn.DataParallel(model)
-    for epoch in range(opt["epochs"]):
-        lr_scheduler.step()
+    with tqdm(range(opt["epochs"])) as epoch_bar:
+        for epoch in epoch_bar:
+            lr_scheduler.step()
 
-        iteration = 0
-        # If start self crit training
-        if opt["self_crit_after"] != -1 and epoch >= opt["self_crit_after"]:
-            sc_flag = True
-            init_cider_scorer(opt["cached_tokens"])
-        else:
-            sc_flag = False
-
-        for data in loader:
-            torch.cuda.synchronize()
-            fc_feats = data['fc_feats'].cuda()
-            labels = data['labels'].cuda()
-            masks = data['masks'].cuda()
-
-            optimizer.zero_grad()
-            if not sc_flag:
-                seq_probs, _ = model(fc_feats, labels, 'train')
-                loss = crit(seq_probs, labels[:, 1:], masks[:, 1:])
+            iteration = 0
+            total_loss = 0
+            # If start self crit training
+            if opt["self_crit_after"] != -1 and epoch >= opt["self_crit_after"]:
+                sc_flag = True
+                init_cider_scorer(opt["cached_tokens"])
             else:
-                seq_probs, seq_preds = model(
-                    fc_feats, mode='inference', opt=opt)
-                reward = get_self_critical_reward(model, fc_feats, data,
-                                                  seq_preds)
-                print(reward.shape)
-                loss = rl_crit(seq_probs, seq_preds,
-                               torch.from_numpy(reward).float().cuda())
+                sc_flag = False
 
-            loss.backward()
-            clip_grad_value_(model.parameters(), opt['grad_clip'])
-            optimizer.step()
-            train_loss = loss.item()
-            torch.cuda.synchronize()
-            iteration += 1
+            with tqdm(loader) as loader_bar:
+                for data in loader_bar:
+                    torch.cuda.synchronize()
+                    fc_feats = data['fc_feats'].cuda()
+                    labels = data['labels'].cuda()
+                    masks = data['masks'].cuda()
 
-            if not sc_flag:
-                print("iter %d (epoch %d), train_loss = %.6f" %
-                      (iteration, epoch, train_loss))
-            else:
-                print("iter %d (epoch %d), avg_reward = %.6f" %
-                      (iteration, epoch, np.mean(reward[:, 0])))
+                    optimizer.zero_grad()
+                    if not sc_flag:
+                        seq_probs, _ = model(fc_feats, labels, 'train')
+                        loss = crit(seq_probs, labels[:, 1:], masks[:, 1:])
+                    else:
+                        seq_probs, seq_preds = model(
+                            fc_feats, mode='inference', opt=opt)
+                        reward = get_self_critical_reward(model, fc_feats, data,
+                                                          seq_preds)
+                        print(reward.shape)
+                        loss = rl_crit(seq_probs, seq_preds,
+                                       torch.from_numpy(reward).float().cuda())
 
-        if epoch % opt["save_checkpoint_every"] == 0:
-            model_path = os.path.join(opt["checkpoint_path"],
-                                      'model_%d.pth' % (epoch))
-            model_info_path = os.path.join(opt["checkpoint_path"],
-                                           'model_score.txt')
-            torch.save(model.state_dict(), model_path)
-            print("model saved to %s" % (model_path))
-            with open(model_info_path, 'a') as f:
-                f.write("model_%d, loss: %.6f\n" % (epoch, train_loss))
+                    loss.backward()
+                    clip_grad_value_(model.parameters(), opt['grad_clip'])
+                    optimizer.step()
+                    train_loss = loss.item()
+                    total_loss += train_loss
+                    torch.cuda.synchronize()
+                    iteration += 1
+
+                    if not sc_flag:
+                       loader_bar.set_postfix(loss=total_loss/iteration)
+                       # print("iter %d (epoch %d), train_loss = %.6f" %
+                       #       (iteration, epoch, train_loss))
+                    else:
+                       loader_bar.set_postfix(avg_reward='{:f}'.format(np.mean(reward[:,0])))
+                       # print("iter %d (epoch %d), avg_reward = %.6f" %
+                       #       (iteration, epoch, np.mean(reward[:, 0])))
+
+            epoch_bar.set_description('Epoch {}'.format(epoch))
+
+            if epoch % opt["save_checkpoint_every"] == 0:
+                model_path = os.path.join(opt["checkpoint_path"],
+                                          'model_%d.pth' % (epoch))
+                model_info_path = os.path.join(opt["checkpoint_path"],
+                                               'model_score.txt')
+                torch.save(model.state_dict(), model_path)
+                #print("model saved to %s" % (model_path))
+                with open(model_info_path, 'a') as f:
+                    f.write("model_%d, loss: %.6f\n" % (epoch, total_loss/iteration))
 
 
 def main(opt):
     dataset = VideoDataset(opt, 'train')
-    loader = DataLoader(dataset, batch_size=1, shuffle=True) # batch_size 1 movie at a time
+    loader = DataLoader(dataset, batch_size=opt['batch_size'], shuffle=True)
     opt["vocab_size"] = dataset.get_vocab_size()
     if opt["model"] == 'S2VTModel':
         model = S2VTModel(

@@ -1,12 +1,13 @@
 import json
 import os
+from tqdm import tqdm
 import argparse
 import torch
 from torch import nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from models import EncoderRNN, DecoderRNN, S2VTAttModel, S2VTModel
-from dataloader import MovieLoader
+from dataloader import VideoDataset
 import misc.utils as utils
 from misc.cocoeval import suppress_stdout_stderr, COCOScorer
 
@@ -28,15 +29,15 @@ def convert_data_to_coco_scorer_format(data_frame):
 
 def test(model, crit, dataset, vocab, opt):
     model.eval()
-    movie_loader = dataset
+    loader = DataLoader(dataset, batch_size=opt['batch_size'], shuffle=True)
     scorer = COCOScorer()
     gt_dataframe = json_normalize(
         json.load(open(opt["input_json"]))['sentences'])
     gts = convert_data_to_coco_scorer_format(gt_dataframe)
     results = []
     samples = {}
-    for loader in movie_loader:
-        for data in loader:
+    with tqdm(loader) as loader_bar:
+        for data in loader_bar:
             # forward the model to get loss
             fc_feats = data['fc_feats'].cuda()
             labels = data['labels'].cuda()
@@ -73,18 +74,20 @@ def test(model, crit, dataset, vocab, opt):
 
 
 def main(opt):
-    dataset = MovieLoader(opt, "test")
+    dataset = VideoDataset(opt, "val")
     opt["vocab_size"] = dataset.get_vocab_size()
     opt["seq_length"] = dataset.max_len
     if opt["model"] == 'S2VTModel':
         model = S2VTModel(opt["vocab_size"], opt["max_len"], opt["dim_hidden"], opt["dim_word"],
-                          rnn_dropout_p=opt["rnn_dropout_p"]).cuda()
+                          rnn_dropout_p=opt["rnn_dropout_p"], rnn_cell=opt['rnn_type']).cuda()
     elif opt["model"] == "S2VTAttModel":
         encoder = EncoderRNN(opt["dim_vid"], opt["dim_hidden"], bidirectional=opt["bidirectional"],
-                             input_dropout_p=opt["input_dropout_p"], rnn_dropout_p=opt["rnn_dropout_p"])
+                             input_dropout_p=opt["input_dropout_p"], rnn_dropout_p=opt["rnn_dropout_p"],
+                             rnn_cell=opt['rnn_type'])
         decoder = DecoderRNN(opt["vocab_size"], opt["max_len"], opt["dim_hidden"], opt["dim_word"],
                              input_dropout_p=opt["input_dropout_p"],
-                             rnn_dropout_p=opt["rnn_dropout_p"], bidirectional=opt["bidirectional"])
+                             rnn_dropout_p=opt["rnn_dropout_p"], bidirectional=opt["bidirectional"],
+                             rnn_cell=opt['rnn_type'])
         model = S2VTAttModel(encoder, decoder).cuda()
     #model = nn.DataParallel(model)
     # Setup the model
