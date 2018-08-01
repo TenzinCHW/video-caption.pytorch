@@ -16,15 +16,12 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 
-def train(loader, model, crit, optimizer, lr_scheduler, opt, rl_crit=None):
-    model.train()
+def train(loader, v_loader, model, crit, optimizer, lr_scheduler, opt, rl_crit=None):
     #model = nn.DataParallel(model)
     with tqdm(range(opt["epochs"])) as epoch_bar:
         for epoch in epoch_bar:
             lr_scheduler.step()
 
-            iteration = 0
-            total_loss = 0
             # If start self crit training
             if opt["self_crit_after"] != -1 and epoch >= opt["self_crit_after"]:
                 sc_flag = True
@@ -32,46 +29,12 @@ def train(loader, model, crit, optimizer, lr_scheduler, opt, rl_crit=None):
             else:
                 sc_flag = False
 
-            with tqdm(loader) as loader_bar:
-                for data in loader_bar:
-                    torch.cuda.synchronize()
-                    fc_feats = data['fc_feats'].cuda()
-                    labels = data['labels'].cuda()
-                    masks = data['masks'].cuda()
-
-                    optimizer.zero_grad()
-                    if not sc_flag:
-                        seq_probs, _ = model(fc_feats, labels, 'train')
-                        loss = crit(seq_probs, labels[:, 1:], masks[:, 1:])
-                    else:
-                        seq_probs, seq_preds = model(
-                            fc_feats, mode='inference', opt=opt)
-                        reward = get_self_critical_reward(model, fc_feats, data,
-                                                          seq_preds)
-                        print(reward.shape)
-                        loss = rl_crit(seq_probs, seq_preds,
-                                       torch.from_numpy(reward).float().cuda())
-
-                    loss.backward()
-                    clip_grad_value_(model.parameters(), opt['grad_clip'])
-                    optimizer.step()
-                    train_loss = loss.item()
-                    total_loss += train_loss
-                    torch.cuda.synchronize()
-                    iteration += 1
-
-                    if not sc_flag:
-                       loader_bar.set_postfix(loss=total_loss/iteration)
-                       # print("iter %d (epoch %d), train_loss = %.6f" %
-                       #       (iteration, epoch, train_loss))
-                    else:
-                       loader_bar.set_postfix(avg_reward='{:f}'.format(np.mean(reward[:,0])))
-                       # print("iter %d (epoch %d), avg_reward = %.6f" %
-                       #       (iteration, epoch, np.mean(reward[:, 0])))
+            train_loss, t_iter = forward(loader, model, crit, optimizer, sc_flag, rl_crit=rl_crit)
 
             epoch_bar.set_description('Epoch {}'.format(epoch))
 
             if epoch % opt["save_checkpoint_every"] == 0:
+                val_loss, v_iter = forward(v_loader, model, crit, optimizer, sc_flag, train=False, rl_crit=rl_crit)
                 model_path = os.path.join(opt["checkpoint_path"],
                                           'model_%d.pth' % (epoch))
                 model_info_path = os.path.join(opt["checkpoint_path"],
@@ -79,12 +42,59 @@ def train(loader, model, crit, optimizer, lr_scheduler, opt, rl_crit=None):
                 torch.save(model.state_dict(), model_path)
                 #print("model saved to %s" % (model_path))
                 with open(model_info_path, 'a') as f:
-                    f.write("model_%d, loss: %.6f\n" % (epoch, total_loss/iteration))
+                    f.write("model_{}, loss: {:f}, val_loss: {:f}\n".format(epoch, train_loss/t_iter, val_loss/v_iter))
 
+
+def forward(loader, model, crit, optimizer, sc_flag, train=True, rl_crit=None):
+    iteration = 0
+    total_loss = 0
+    if train: model.train()
+    else: model.eval()
+    with tqdm(loader) as loader_bar:
+        for data in loader_bar:
+            torch.cuda.synchronize()
+            fc_feats = data['fc_feats'].cuda()
+            labels = data['labels'].cuda()
+            masks = data['masks'].cuda()
+
+            optimizer.zero_grad()
+            if not sc_flag:
+                seq_probs, _ = model(fc_feats, labels, 'train')
+                loss = crit(seq_probs, labels[:, 1:], masks[:, 1:])
+            else:
+                seq_probs, seq_preds = model(
+                    fc_feats, mode='inference', opt=opt)
+                reward = get_self_critical_reward(model, fc_feats, data,
+                                                  seq_preds)
+                print(reward.shape)
+                loss = rl_crit(seq_probs, seq_preds,
+                               torch.from_numpy(reward).float().cuda())
+
+            if train:
+                loader_bar.set_description('TRAIN')
+                loss.backward()
+                clip_grad_value_(model.parameters(), opt['grad_clip'])
+                optimizer.step()
+            else: loader_bar.set_description('VAL')
+            split_loss = loss.item()
+            total_loss += split_loss
+            torch.cuda.synchronize()
+            iteration += 1
+
+            if not sc_flag:
+               loader_bar.set_postfix(loss=total_loss/iteration)
+               # print("iter %d (epoch %d), train_loss = %.6f" %
+               #       (iteration, epoch, train_loss))
+            else:
+               loader_bar.set_postfix(avg_reward='{:f}'.format(np.mean(reward[:,0])))
+               # print("iter %d (epoch %d), avg_reward = %.6f" %
+               #       (iteration, epoch, np.mean(reward[:, 0])))
+    return total_loss, iteration
 
 def main(opt):
-    dataset = VideoDataset(opt, 'train')
+    dataset, v_dataset = VideoDataset(opt, 'train'), VideoDataset(opt, 'val')
     loader = DataLoader(dataset, batch_size=opt['batch_size'], shuffle=True)
+    v_loader = DataLoader(v_dataset, batch_size=opt['batch_size'], shuffle=True)
     opt["vocab_size"] = dataset.get_vocab_size()
     if opt["model"] == 'S2VTModel':
         model = S2VTModel(
@@ -126,7 +136,7 @@ def main(opt):
         step_size=opt["learning_rate_decay_every"],
         gamma=opt["learning_rate_decay_rate"])
 
-    train(loader, model, crit, optimizer, exp_lr_scheduler, opt, rl_crit)
+    train(loader, v_loader, model, crit, optimizer, exp_lr_scheduler, opt, rl_crit)
 
 
 if __name__ == '__main__':
