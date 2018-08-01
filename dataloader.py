@@ -4,53 +4,7 @@ import random
 import os
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
-
-
-class MovieLoader():
-    def __init__(self, opt, mode, shuffle=True):
-        self.batch_size = opt['batch_size']
-
-        self.opt_ref = {'caption' : self.captions,
-                        'ix_to_word' : self.ix_to_word,
-                        'word_to_ix' : self.word_to_ix,
-                        'feats_dir' : self.feats_dir,
-                        'index_map' : self.index_map,
-                        'max_len' : self.max_len,
-                        'c3d_feats_dir' : self.c3d_feats_dir,
-                        'with_c3d' : self.with_c3d,
-                        'batch_size' : self.batch_size}
-
-        # Control split of data to load
-        movie_ids = [self.splits[self.mode][ix]
-                     for ix in range(len(self))]
-        movie_sets = [VideoDataset(self.opt_ref, movie_id)
-                      for movie_id in movie_ids]
-        self.loaders = [DataLoader(movie_set, batch_size=1,
-                             shuffle=True)
-                             for movie_set in movie_sets]
-
-#        self.loaders = [DataLoader(movie_set, batch_size=self.batch_size,
-#                             shuffle=False)
-#                             for movie_set in movie_sets]
-
-    def __iter__(self):
-        self.n = 0
-        if self.shuffle:
-            random.shuffle(self.loaders)
-        return self
-
-    def __next__(self):
-        if self.n < len(self):
-            next_item = self.loaders[self.n]
-            self.n += 1
-            return next_item
-        else:
-            raise StopIteration
-
-
-    def __len__(self):
-        return len(self.splits[self.mode])
+from torch.utils.data import Dataset
 
 
 class VideoDataset(Dataset):
@@ -89,34 +43,6 @@ class VideoDataset(Dataset):
         print('max sequence length in data is', self.max_len)
 
 
-#    def __getitem__(self, ix):
-#        data = {'fc_feats' : [],
-#                'labels' : [],
-#                'masks' : [],
-#                'gts' : [],
-#                'video_ids' : []}
-#
-#        for i in range(ix, ix + self.batch_size):
-#            data = self.collect(data, self.sample_single(i))
-#
-#        data = self.cat(data)
-#        return data
-#
-#
-#    def collect(self, data, single):
-#        for k in data.keys():
-#            data[k].append(single[k])
-#        return data
-#
-#
-#    def cat(self, data):
-#        for k, v in data.items():
-#            if type(v[0]) is torch.Tensor:
-#                data[k] = torch.cat(v)
-#        return data
-
-
-#    def sample_single(self, ix):
     def __getitem__(self, ix):
         """This function returns a tuple that is further passed to collate_fn
         """
@@ -146,7 +72,6 @@ class VideoDataset(Dataset):
 
     def global_clip_id(self, ix):
         return str(self.splits[self.mode][ix])
-#        return str(self.index_map['movies'][self.movie_id][ix])
 
 
     def npy_name(self, global_clip_id):
@@ -155,20 +80,23 @@ class VideoDataset(Dataset):
 
 
     def fc_feats(self, npy_name):
-        fc_feat = []
-        for dir in self.feats_dir:
-            feat = np.load(os.path.join(dir, npy_name))
-            if len(feat) == 1:
-                feat = np.repeat(feat, 40, axis=0)
-            fc_feat.append(feat)
+#        fc_feat = []
+#        for dir in self.feats_dir:
+#            feat = np.load(os.path.join(dir, npy_name))
+#
+#            if len(feat) == 1:
+#                feat = np.repeat(feat, 40, axis=0)
+#
+#            fc_feat.append(feat)
+#        fc_feat = np.concatenate(fc_feat, axis=1)
+#        return fc_feat
+
 #            fc_feat.append(np.load(os.path.join(dir, npy_name)).flatten())
-        fc_feat = np.concatenate(fc_feat, axis=1)
-        return fc_feat
 #        fc_feat = np.hstack(fc_feat)
 #        return np.expand_dims(fc_feat, 0)
 
-#        return np.concatenate([np.load(os.path.join(d, npy_name))
-#                               for d in self.feats_dir], axis=1)
+        return np.concatenate([np.load(os.path.join(d, npy_name))
+                               for d in self.feats_dir], axis=1)
 
 
     def gts(self, global_clip_id, captions):
@@ -189,5 +117,4 @@ class VideoDataset(Dataset):
 
     def __len__(self):
         return len(self.splits[self.mode])
-#        return len(self.index_map['movies'][self.movie_id])
 
