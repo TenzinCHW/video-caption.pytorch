@@ -57,8 +57,8 @@ def test(model, crit, dataset, vocab, opt):
                 gt = gts[video_id][0]['caption']
                 samples[video_id] = [{'image_id': video_id, 'caption': sent, 'gt': gt}]
 
-#    with suppress_stdout_stderr():
-    valid_score = scorer.score(gts, samples, samples.keys())
+    with suppress_stdout_stderr():
+        valid_score = scorer.score(gts, samples, samples.keys())
     results.append(valid_score)
     print(valid_score)
 
@@ -74,7 +74,7 @@ def test(model, crit, dataset, vocab, opt):
 
 
 def main(opt):
-    dataset = VideoDataset(opt, "val")
+    dataset = VideoDataset(opt, "test")
     opt["vocab_size"] = dataset.get_vocab_size()
     opt["seq_length"] = dataset.max_len
     if opt["model"] == 'S2VTModel':

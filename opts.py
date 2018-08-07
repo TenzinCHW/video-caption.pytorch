@@ -92,9 +92,9 @@ def parse_opt():
     # Optimization: General
 
     parser.add_argument(
-        '--epochs', type=int, default=100, help='number of epochs')
+        '--epochs', type=int, default=151, help='number of epochs')
     parser.add_argument(
-        '--batch_size', type=int, default=300, help='minibatch size')
+        '--batch_size', type=int, default=600, help='minibatch size')
     parser.add_argument(
         '--grad_clip',
         type=float,
@@ -136,7 +136,7 @@ def parse_opt():
     parser.add_argument(
         '--save_checkpoint_every',
         type=int,
-        default=1,
+        default=5,
         help='how often to save a model checkpoint (in epoch)?')
     parser.add_argument(
         '--checkpoint_path',

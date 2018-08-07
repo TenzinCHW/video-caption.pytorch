@@ -80,23 +80,23 @@ class VideoDataset(Dataset):
 
 
     def fc_feats(self, npy_name):
-#        fc_feat = []
-#        for dir in self.feats_dir:
-#            feat = np.load(os.path.join(dir, npy_name))
-#
-#            if len(feat) == 1:
-#                feat = np.repeat(feat, 40, axis=0)
-#
-#            fc_feat.append(feat)
-#        fc_feat = np.concatenate(fc_feat, axis=1)
-#        return fc_feat
+        fc_feat = []
+        for dir in self.feats_dir:
+            feat = np.load(os.path.join(dir, npy_name))
+
+            if len(feat) == 1:
+                feat = np.repeat(feat, 40, axis=0)
+
+            fc_feat.append(feat)
+        fc_feat = np.concatenate(fc_feat, axis=1)
+        return fc_feat
 
 #            fc_feat.append(np.load(os.path.join(dir, npy_name)).flatten())
 #        fc_feat = np.hstack(fc_feat)
 #        return np.expand_dims(fc_feat, 0)
 
-        return np.concatenate([np.load(os.path.join(d, npy_name))
-                               for d in self.feats_dir], axis=1)
+#        return np.concatenate([np.load(os.path.join(d, npy_name))
+#                               for d in self.feats_dir], axis=1)
 
 
     def gts(self, global_clip_id, captions):
